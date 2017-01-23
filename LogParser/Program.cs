@@ -10,6 +10,8 @@ namespace LogParser
 	{
 		static void Main(string[] args)
 		{
+			Parser p = new Parser("c:\\tmp");
+			p.Parse();
 		}
 	}
 }
