@@ -11,14 +11,15 @@ namespace LogParser
 	public class Parser
 	{
 		protected string StartPath { get; set; }
-
+		protected StringBuilder StringBuilder { get; set; }
 		public Parser(string startPath)
 		{
 			StartPath = startPath;
+			StringBuilder = new StringBuilder();
 		}
-
-		protected bool HasLogHeader(string line)
+		protected bool HasLogHeader(string line, out DateTime date)
 		{
+			date = DateTime.MinValue;
 			if (!string.IsNullOrEmpty(line))
 			{
 				int commaIndex = line.IndexOf(",");
@@ -32,6 +33,7 @@ namespace LogParser
 						tmpDateTime = tmpDateTime.Replace(",", ".");
 						if (DateTime.TryParse(tmpDateTime.Trim(), out dummyDate))
 						{
+							date = dummyDate;
 							return true;
 						}
 					}
@@ -39,54 +41,84 @@ namespace LogParser
 			}
 			return false;
 		}
-
-		protected DateTime GetLogHeaderDateTime(string line)
+		protected bool HasLogHeader(string line)
 		{
-			if (!string.IsNullOrEmpty(line))
-			{
-				int commaIndex = line.IndexOf(",");
-				if (commaIndex < 24 && commaIndex > -1)
-				{
-					string tmpDateTime = line.Substring(0, commaIndex);
-					DateTime dummyDate;
-					if (DateTime.TryParse(tmpDateTime.Trim(), out dummyDate))
-					{
-						tmpDateTime = line.Substring(0, commaIndex + 4);
-						tmpDateTime = tmpDateTime.Replace(",", ".");
-						if (DateTime.TryParse(tmpDateTime.Trim(), out dummyDate))
-						{
-							return dummyDate;
-						}
-					}
-				}
-			}
-			return DateTime.MinValue;
+			DateTime dummyDate;
+			return HasLogHeader(line, out dummyDate);
 		}
+
+		DateTime searchMinDateTime = new DateTime(2017, 1, 11, 1, 00, 00);
+		DateTime searchMaxDateTime = new DateTime(2017, 1, 16, 1, 59, 00);
 
 		public bool ProcessZipFile(string file)
 		{
+			Console.WriteLine(file);
+			string tmp = file;
+			tmp = tmp.Replace("server.log.", "").Replace(".zip","");
+			tmp = System.IO.Path.GetFileNameWithoutExtension(tmp);
+			DateTime fileLog;
+			if (DateTime.TryParse(tmp, out fileLog))
+			{
+				if (fileLog > searchMinDateTime && fileLog < searchMaxDateTime)
+				{
+					FileInfo info = new FileInfo(file);
+					if ((info.CreationTime > searchMinDateTime && info.CreationTime < searchMaxDateTime) || (info.LastWriteTime > searchMinDateTime && info.LastWriteTime < searchMaxDateTime))
+					{
+						return true;
+					}
+				}
+			}
+			else
+			{
+				FileInfo info = new FileInfo(file);
+				if ((info.CreationTime > searchMinDateTime && info.CreationTime < searchMaxDateTime) || (info.LastWriteTime > searchMinDateTime && info.LastWriteTime < searchMaxDateTime))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+		public bool ProcessRegularFile(string file)
+		{
+			Console.WriteLine(file);
 			FileInfo info = new FileInfo(file);
-			return true;
+			if ((info.CreationTime > searchMinDateTime && info.CreationTime < searchMaxDateTime) || (info.LastWriteTime > searchMinDateTime && info.LastWriteTime < searchMaxDateTime))
+			{
+				return true;
+			}
+			return false;
 		}
-		public bool ProcessZipEntry(ZipArchiveEntry archiveFile)
+		public bool ProcessZipEntry(ZipArchiveEntry info)
 		{
-			return true;
-		}
-		public bool ProcessZipEntry(string file)
-		{
-			return true;
+			if (info.LastWriteTime > searchMinDateTime && info.LastWriteTime < searchMaxDateTime)
+			{
+				return true;
+			}
+			return false;
 		}
 		public bool ProcessLogFile(string file)
 		{
+			Console.WriteLine(file);
+			FileInfo info = new FileInfo(file);
+			if ((info.CreationTime > searchMinDateTime && info.CreationTime < searchMaxDateTime) || (info.LastWriteTime > searchMinDateTime && info.LastWriteTime < searchMaxDateTime))
+			{
+				return true;
+			}
 			return true;
 		}
 		public bool ProcessLogEntry(string line)
 		{
-			if (HasLogHeader(line))
+			DateTime searchMinDateTime = new DateTime(2017, 1, 13, 11, 17, 00);
+			DateTime searchMaxDateTime = new DateTime(2017, 1, 13, 17, 25, 00);
+			DateTime logDate;
+			if (HasLogHeader(line, out logDate))
 			{
-				DateTime logDate = GetLogHeaderDateTime(line);
+				if ((logDate > searchMinDateTime && logDate < searchMaxDateTime) && (line.IndexOf("OA-Y4FE5UQE0", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("OA-B2RALPJ1K", StringComparison.OrdinalIgnoreCase) > -1))
+				{
+					return true;
+				}
 			}
-			return true;
+			return false;
 		}
 
 		public void Parse()
@@ -122,6 +154,7 @@ namespace LogParser
 					try
 					{
 						string[] lines = System.IO.File.ReadAllLines(logFile);
+						StringBuilder.Clear();
 						string logEntry = string.Empty;
 						bool validLog = false;
 						foreach (string currentLine in lines)
@@ -134,34 +167,36 @@ namespace LogParser
 									line = line + System.Environment.NewLine;
 								}
 
-								if (HasLogHeader(line) && ProcessLogEntry(line))
+								bool hasLogHeader = HasLogHeader(line);
+								bool processLogEntry = ProcessLogEntry(line);
+								if (hasLogHeader && processLogEntry)
 								{
 									validLog = true;
-									if (!string.IsNullOrEmpty(logEntry))
+									if (StringBuilder.Length != 0)
 									{
-										WriteLog(logEntry);
-										logEntry = string.Empty;
+										WriteLog(StringBuilder.ToString());
+										StringBuilder.Clear();
 									}
 
-									logEntry = line;
+									StringBuilder.Append(line);
 								}
 								else
 								{
-									if (HasLogHeader(line) && !ProcessLogEntry(line))
+									if (hasLogHeader && !processLogEntry)
 									{
 										validLog = false;
 									}
 									if (validLog)
 									{
-										logEntry = logEntry + line;
+										StringBuilder.Append(line);
 									}
 								}
 							}
 						}
-						if (!string.IsNullOrEmpty(logEntry))
+						if (StringBuilder.Length != 0)
 						{
-							WriteLog(logEntry);
-							logEntry = string.Empty;
+							WriteLog(StringBuilder.ToString());
+							StringBuilder.Clear();
 						}
 					}
 					catch (Exception ex)
@@ -183,22 +218,47 @@ namespace LogParser
 			{
 				foreach (string file in files)
 				{
-					if (ProcessZipFile(file))
+					if (file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
 					{
-						try
+						if (ProcessZipFile(file))
 						{
-							ZipArchive zipArchive = ZipFile.OpenRead(file);
-							foreach (ZipArchiveEntry entry in zipArchive.Entries)
+							try
 							{
-								if (ProcessZipEntry(entry))
+								ZipArchive zipArchive = ZipFile.OpenRead(file);
+								foreach (ZipArchiveEntry entry in zipArchive.Entries)
 								{
-									entry.ExtractToFile("C:\\TmpLogParser");
+									if (ProcessZipEntry(entry))
+									{
+										entry.ExtractToFile("C:\\TmpLogParser\\" + entry.FullName);
+									}
+								}
+							}
+							catch (Exception ex)
+							{
+								try
+								{
+									ZipFile.ExtractToDirectory(file, "C:\\TmpLogParser");
+								}
+								catch (Exception ex1)
+								{
+									Console.WriteLine(ex.Message);
+									Console.WriteLine(ex1.Message);
 								}
 							}
 						}
-						catch (Exception ex)
+					}
+					else
+					{
+						if (ProcessRegularFile(file))
 						{
-							Console.WriteLine(ex.Message);
+							try
+							{
+								System.IO.File.Copy(file, "C:\\TmpLogParser\\" + System.IO.Path.GetFileName(file));
+							}
+							catch (Exception ex)
+							{
+								Console.WriteLine(ex.Message);
+							}
 						}
 					}
 				}
