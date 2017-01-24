@@ -17,6 +17,8 @@ namespace LogParser
 			StartPath = startPath;
 			StringBuilder = new StringBuilder();
 		}
+		protected string Directory { get; set; }
+
 		protected bool HasLogHeader(string line, out DateTime date)
 		{
 			date = DateTime.MinValue;
@@ -47,8 +49,8 @@ namespace LogParser
 			return HasLogHeader(line, out dummyDate);
 		}
 
-		DateTime searchMinDateTime = new DateTime(2017, 1, 11, 1, 00, 00);
-		DateTime searchMaxDateTime = new DateTime(2017, 1, 16, 1, 59, 00);
+		DateTime searchMinDateTime = new DateTime(2017, 1, 12, 19, 00, 00);
+		DateTime searchMaxDateTime = new DateTime(2017, 1, 14, 19, 59, 00);
 
 		public bool ProcessZipFile(string file)
 		{
@@ -113,7 +115,7 @@ namespace LogParser
 			DateTime logDate;
 			if (HasLogHeader(line, out logDate))
 			{
-				if ((logDate > searchMinDateTime && logDate < searchMaxDateTime) && (line.IndexOf("OA-Y4FE5UQE0", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("OA-B2RALPJ1K", StringComparison.OrdinalIgnoreCase) > -1))
+				if ((logDate > searchMinDateTime && logDate < searchMaxDateTime) && (line.IndexOf("OA-Y4FE5UQE0", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("OA-B2RALPJ1K", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("SOAP call 1532<", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("SOAP call 3310<", StringComparison.OrdinalIgnoreCase) > -1 || line.IndexOf("SOAP call 3675<", StringComparison.OrdinalIgnoreCase) > -1))
 				{
 					return true;
 				}
@@ -134,6 +136,7 @@ namespace LogParser
 				string[] directories = System.IO.Directory.GetDirectories(StartPath);
 				foreach (string directory in directories)
 				{
+					Directory = directory;
 					ProcessZipFiles(directory);
 					ProcessLogFiles();
 				}
@@ -174,7 +177,7 @@ namespace LogParser
 									validLog = true;
 									if (StringBuilder.Length != 0)
 									{
-										WriteLog(StringBuilder.ToString());
+										WriteLog(logFile,StringBuilder.ToString());
 										StringBuilder.Clear();
 									}
 
@@ -195,7 +198,7 @@ namespace LogParser
 						}
 						if (StringBuilder.Length != 0)
 						{
-							WriteLog(StringBuilder.ToString());
+							WriteLog(logFile,StringBuilder.ToString());
 							StringBuilder.Clear();
 						}
 					}
@@ -265,8 +268,10 @@ namespace LogParser
 			}
 		}
 
-		protected void WriteLog(string log)
+		protected void WriteLog(string filename,string log)
 		{
+			System.Diagnostics.Debug.WriteLine(Directory);
+			System.Diagnostics.Debug.WriteLine(filename);
 			System.Diagnostics.Debug.WriteLine(log);
 		}
 	}
