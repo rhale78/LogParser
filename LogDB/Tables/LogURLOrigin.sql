@@ -1,0 +1,6 @@
+﻿CREATE TABLE [dbo].[LogURLOrigin] (
+    [ID]  INT            IDENTITY (1, 1) NOT NULL,
+    [URL] NVARCHAR (MAX) NOT NULL,
+    CONSTRAINT [PK_LogURLOrigin] PRIMARY KEY CLUSTERED ([ID] ASC)
+);
+

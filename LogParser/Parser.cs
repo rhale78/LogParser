@@ -50,6 +50,7 @@ namespace LogParser
 			return HasLogHeader(line, out dummyDate);
 		}
 
+		private const string DatabaseConnection = "Server=localhost; Database=LogDatabase; Trusted_Connection=True;";
 		DateTime searchMinDateTime = new DateTime(2017, 1, 12, 19, 00, 00);
 		DateTime searchMaxDateTime = new DateTime(2017, 1, 14, 19, 59, 00);
 
@@ -321,6 +322,283 @@ namespace LogParser
 		}
 
 		bool needsVerify = false;
+		
+		protected int GetProcessFileEntry(string server, string filename)
+		{
+			if (server.Contains("\\"))
+			{
+				server = server.Substring(server.LastIndexOf("\\") + 1);
+			}
+			using (SqlConnection connection = new SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					//using (SqlCommand cmd = new SqlCommand("SELECT ID FROM PROCESSEDFILES WHERE Filename='" + filename + "' and Server='" + server + "'", connection))
+					using (SqlCommand cmd = new SqlCommand("GetProcessFileEntryID", connection)) // "SELECT ID FROM PROCESSEDFILES WHERE Filename='" + filename + "' and Server='" + server + "'", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Filename", filename);
+						cmd.Parameters.AddWithValue("@Server", server);
+						object tmp = cmd.ExecuteScalar();
+						if (tmp == null || tmp is DBNull)
+						{
+							return 0;
+						}
+						return (int)tmp;
+					}
+				}
+				catch (Exception ex)
+				{ }
+			}
+			return 0;
+		}
+		protected int GetLogEntry(DateTime logTime, int fileprocessId, string data)
+		{
+			int? logEventTypeID = null;
+			int? logSourceID = null;
+			int? logURLID = null;
+			string soapCallNumber = null;
+
+			if (logTime == DateTime.MinValue)
+			{
+				HasLogHeader(data, out logTime);
+				Console.WriteLine("Date processing failure");
+			}
+			string eventTypeName = data.Substring(25, data.IndexOf(" ", 26) - 25).Trim();
+			string logSourceName = data.Substring(data.IndexOf("["), data.IndexOf("]") - data.IndexOf("["));
+			string urlName = data.Substring(data.IndexOf("("), data.IndexOf(")") - data.IndexOf("("));
+			if (urlName.Contains(":SOAP call "))
+			{
+				soapCallNumber = urlName.Substring(urlName.IndexOf(":SOAP call " + 11), urlName.IndexOf("<") - urlName.IndexOf(":SOAP call " + 11));
+				int tmpCallNumber = 0;
+				if (!int.TryParse(soapCallNumber, out tmpCallNumber))
+				{
+					soapCallNumber = null;
+				}
+				else
+				{
+					urlName = urlName.Substring(0, urlName.IndexOf(":"));
+					data = data.Substring(data.IndexOf("<"));
+				}
+			}
+			if (EventTypeCache.ContainsKey(eventTypeName))
+			{
+				logEventTypeID = EventTypeCache[eventTypeName];
+			}
+			else
+			{
+				WriteLogEventType(eventTypeName);
+				EventTypeCache.Add(eventTypeName, GetLogEventTypeID(eventTypeName));
+			}
+			if (LogSourceCache.ContainsKey(logSourceName))
+			{
+				logSourceID = LogSourceCache[logSourceName];
+			}
+			else
+			{
+				WriteLogSource(logSourceName);
+				LogSourceCache.Add(logSourceName, GetLogSourceID(logSourceName));
+			}
+			if (URLCache.ContainsKey(urlName))
+			{
+				logURLID = URLCache[urlName];
+			}
+			else
+			{
+				WriteLogURLOrigin(urlName);
+				URLCache.Add(urlName, GetLogURLOriginID(urlName));
+			}
+
+
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("GetLogEntryID", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@LogTime", logTime);
+						cmd.Parameters.AddWithValue("@FileProcessID", fileprocessId);
+						cmd.Parameters.AddWithValue("@LogEventTypeID", logEventTypeID);
+						cmd.Parameters.AddWithValue("@LogSourceID", logSourceID);
+						cmd.Parameters.AddWithValue("@LogURLOriginID", logURLID);
+						cmd.Parameters.AddWithValue("@SoapCallNumber", soapCallNumber);
+						cmd.Parameters.AddWithValue("@Data", data);
+
+						object tmp = cmd.ExecuteScalar();
+						if (tmp == null)
+						{
+							return 0;
+						}
+						else
+						{
+							return (int)tmp;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+			return 0;
+		}
+		protected int GetLogEventTypeID(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("GetLogEventTypeID", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteScalar();
+						if (tmp == null)
+						{
+							return 0;
+						}
+						else
+						{
+							return (int)tmp;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+			return 0;
+		}
+		protected int GetLogSourceID(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("GetLogSourceID", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteScalar();
+						if (tmp == null)
+						{
+							return 0;
+						}
+						else
+						{
+							return (int)tmp;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+			return 0;
+		}
+		protected int GetLogURLOriginID(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("GetLogURLOriginID", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteScalar();
+						if (tmp == null)
+						{
+							return 0;
+						}
+						else
+						{
+							return (int)tmp;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+			return 0;
+		}
+
+		protected void WriteLogURLOrigin(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("WriteLogURLOrigin", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteNonQuery();
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+		}
+		protected void WriteLogSource(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("WriteLogSource", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteNonQuery();
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+		}
+		protected void WriteLogEventType(string name)
+		{
+			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
+			{
+				try
+				{
+					connection.Open();
+					using (SqlCommand cmd = new SqlCommand("WriteLogEventType", connection))
+					{
+						cmd.CommandType = System.Data.CommandType.StoredProcedure;
+						cmd.Parameters.AddWithValue("@Name", name);
+
+						object tmp = cmd.ExecuteNonQuery();
+					}
+				}
+				catch (Exception ex)
+				{
+
+				}
+			}
+		}
 
 		protected int WriteProcessFileEntry(string server, string filename)
 		{
@@ -334,13 +612,17 @@ namespace LogParser
 				if (id == 0)
 				{
 					needsVerify = false;
-					using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection("Server=localhost; Database=LogDatabase; Trusted_Connection=True;"))
+					using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection(DatabaseConnection))
 					{
 						try
 						{
 							connection.Open();
-							using (SqlCommand cmd = new SqlCommand("INSERT INTO ProcessedFiles(Filename, Server) VALUES ('" + filename + "','" + server + "')", connection))
+							using (SqlCommand cmd = new SqlCommand("WriteProcessFileEntry", connection))
 							{
+								cmd.CommandType = System.Data.CommandType.StoredProcedure;
+								cmd.Parameters.AddWithValue("@Filename", filename);
+								cmd.Parameters.AddWithValue("@Server", server);
+
 								cmd.ExecuteNonQuery();
 							}
 						}
@@ -361,61 +643,9 @@ namespace LogParser
 			return GetProcessFileEntry(server, filename);
 		}
 
-		protected int GetProcessFileEntry(string server, string filename)
-		{
-			if (server.Contains("\\"))
-			{
-				server = server.Substring(server.LastIndexOf("\\") + 1);
-			}
-			using (SqlConnection connection = new SqlConnection("Server=localhost; Database=LogDatabase; Trusted_Connection=True;"))
-			{
-				try
-				{
-					connection.Open();
-					using (SqlCommand cmd = new SqlCommand("SELECT ID FROM PROCESSEDFILES WHERE Filename='" + filename + "' and Server='" + server + "'", connection))
-					{
-						object tmp = cmd.ExecuteScalar();
-						if (tmp == null || tmp is DBNull)
-						{
-							return 0;
-						}
-						return (int)tmp;
-					}
-				}
-				catch (Exception ex)
-				{ }
-			}
-			return 0;
-		}
-		protected int GetLogEntry(DateTime logTime, int fileprocessId, string data)
-		{
-			using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection("Server=localhost; Database=LogDatabase; Trusted_Connection=True;"))
-			{
-				try
-				{
-					connection.Open();
-					using (SqlCommand cmd = new SqlCommand("SELECT ID FROM LogEntry WHERE LogDateTime=convert(datetime2,'" + String.Format("{0:o}", logTime) + "') AND ProcessedFilesID='" + fileprocessId + "' AND Data='" + data + "'", connection))
-					{
-						object tmp = cmd.ExecuteScalar();
-						if (tmp == null)
-						{
-							return 0;
-						}
-						else
-						{
-							return (int)tmp;
-						}
-
-
-					}
-				}
-				catch (Exception ex)
-				{
-
-				}
-			}
-			return 0;
-		}
+		Dictionary<string, int> EventTypeCache = new Dictionary<string, int>();
+		Dictionary<string, int> LogSourceCache = new Dictionary<string, int>();
+		Dictionary<string, int> URLCache = new Dictionary<string, int>();
 
 		protected void WriteLogEntry(DateTime logTime, int fileprocessId, string data)
 		{
@@ -428,13 +658,79 @@ namespace LogParser
 				}
 				if (id == 0)
 				{
-					using (System.Data.SqlClient.SqlConnection connection = new System.Data.SqlClient.SqlConnection("Server=localhost; Database=LogDatabase; Trusted_Connection=True;"))
+					int? logEventTypeID=null;
+					int? logSourceID=null;
+					int? logURLID = null;
+					string soapCallNumber = null;
+
+					if(logTime==DateTime.MinValue)
+					{
+						HasLogHeader(data, out logTime);
+						Console.WriteLine("Date processing failure");
+					}
+					string eventTypeName = data.Substring(25, data.IndexOf(" ", 26) - 25).Trim();
+					string logSourceName = data.Substring(data.IndexOf("["), data.IndexOf("]") - data.IndexOf("["));
+					string urlName = data.Substring(data.IndexOf("("), data.IndexOf(")") - data.IndexOf("("));
+					if (urlName.Contains(":SOAP call "))
+					{
+						soapCallNumber = urlName.Substring(urlName.IndexOf(":SOAP call " + 11), urlName.IndexOf("<") - urlName.IndexOf(":SOAP call " + 11));
+						int tmpCallNumber = 0;
+						if (!int.TryParse(soapCallNumber, out tmpCallNumber))
+						{
+							soapCallNumber = null;
+						}
+						else
+						{
+							urlName = urlName.Substring(0, urlName.IndexOf(":"));
+							data = data.Substring(data.IndexOf("<"));
+						}
+					}
+					if(EventTypeCache.ContainsKey(eventTypeName))
+					{
+						logEventTypeID = EventTypeCache[eventTypeName];
+					}
+					else
+					{
+						WriteLogEventType(eventTypeName);
+						EventTypeCache.Add(eventTypeName, GetLogEventTypeID(eventTypeName));
+					}
+					if(LogSourceCache.ContainsKey(logSourceName))
+					{
+						logSourceID = LogSourceCache[logSourceName];
+					}
+					else
+					{
+						WriteLogSource(logSourceName);
+						LogSourceCache.Add(logSourceName, GetLogSourceID(logSourceName));
+					}
+					if(URLCache.ContainsKey(urlName))
+					{
+						logURLID = URLCache[urlName];
+					}
+					else
+					{
+						WriteLogURLOrigin(urlName);
+						URLCache.Add(urlName, GetLogURLOriginID(urlName));
+					}
+					
+					using (SqlConnection connection = new SqlConnection(DatabaseConnection))
 					{
 						try
 						{
 							connection.Open();
-							using (SqlCommand cmd = new SqlCommand("INSERT INTO LogEntry(LogDateTime, ProcessedFilesID, Data) VALUES (convert(datetime2,'" + String.Format("{0:o}", logTime) + "'), '" + fileprocessId + "', '" + data + "')", connection))
+							//using (SqlCommand cmd = new SqlCommand("INSERT INTO LogEntry(LogDateTime, ProcessedFilesID, Data) VALUES (convert(datetime2,'" + String.Format("{0:o}", logTime) + "'), '" + fileprocessId + "', '" + data + "')", connection))
+							//{
+							using (SqlCommand cmd = new SqlCommand("WriteLogEntry", connection))
 							{
+								cmd.CommandType = System.Data.CommandType.StoredProcedure;
+								cmd.Parameters.AddWithValue("@LogTime", logTime);
+								cmd.Parameters.AddWithValue("@FileProcessID", fileprocessId);
+								cmd.Parameters.AddWithValue("@LogEventTypeID", logEventTypeID);
+								cmd.Parameters.AddWithValue("@LogSourceID", logSourceID);
+								cmd.Parameters.AddWithValue("@LogURLOriginID", logURLID);
+								cmd.Parameters.AddWithValue("@SoapCallNumber", soapCallNumber);
+								cmd.Parameters.AddWithValue("@Data", data);
+
 								cmd.ExecuteNonQuery();
 							}
 						}
@@ -448,5 +744,6 @@ namespace LogParser
 			catch (Exception ex)
 			{ }
 		}
+		
 	}
 }
