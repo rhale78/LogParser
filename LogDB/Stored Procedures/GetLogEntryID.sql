@@ -11,6 +11,7 @@ CREATE PROCEDURE [dbo].[GetLogEntryID]
 	@LogSourceID int,
 	@LogURLOriginID int,
 	@SoapCallNumber nvarchar(10),
+	@SoapParameterID int=null,
 	@Data nvarchar(max)
 AS
 BEGIN
@@ -24,5 +25,6 @@ BEGIN
 	and LogSourceID=@LogSourceID
 	and LogURLOriginID=@LogURLOriginID
 	and (SoapCallNumber=@SoapCallNumber and @SoapCallNumber!=NULL)
+	and (SoapParameterID=@SoapParameterID and @SoapParameterID!=null)
 	AND Data=@Data
 END

@@ -11,7 +11,7 @@ namespace LogParser
 		static void Main(string[] args)
 		{
 			//Parser p = new Parser("c:\\tmp");
-			Parser p = new Parser(@"\\10.30.4.60\PRD-Server-Logs-Archive\webservices");
+			Parser p = new Parser(@"\\10.30.4.60\PRD-Server-Logs-Archive\webservices\121");
 			p.Parse();
 		}
 	}
